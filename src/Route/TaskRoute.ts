@@ -68,15 +68,29 @@ taskRoute.get('/', async (context) => {
 
 // タスクを更新する　CRUD　のUpdate
 
-taskRoute.put('/:id', async (context) => {
-	const id = context.req.param('id');
-	const body = await context.req.json();
-	const taskEntity = { id, ...body };
+taskRoute.put(
+	'/:id',
+	zValidator(
+		'json',
+		z.object({
+			// jsonで受け取ったデータをzod形式のobjectチェックルールでチェックする
+			title: z.string().min(1), //title:プロパティが文字列で1文字以上であれば通過
+			description: z.string().optional(), //description:プロパティが文字列で、オプショナル（合ってもなくても良い）
+			priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(), //enum([a, b, c, d]) a〜dのいずれかを許可合ってもなくても良い
+			tag: z.array(z.string().min(1)).optional(), // フロントから送るときはカンマ区切りのテキストなのでそれを配列として受け取るルールにする
+			expiresAt: z.coerce.date().optional(), // z.coerce で型を自動変換をしてからバリデーションする。string だと 09-15 通る 90-15 も通ってしまう。
+		})
+	),
+	async (context) => {
+		const id = context.req.param('id');
+		const body = await context.req.json();
+		const taskEntity = { id, ...body };
 
-	context.env.KV_TASKS.put(id, JSON.stringify(taskEntity));
+		context.env.KV_TASKS.put(id, JSON.stringify(taskEntity));
 
-	return context.json(taskEntity);
-});
+		return context.json(taskEntity);
+	}
+);
 
 // タスクを削除する　CRUD のDelete
 
