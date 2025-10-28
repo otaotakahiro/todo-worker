@@ -6,18 +6,16 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "todo-worker",
 	"main": "src/index.ts",
+	"compatibility_flags": ["nodejs_compat"], //
 	"compatibility_date": "2025-09-05",
 	"observability": {
 		"enabled": true
 	},
-	"kv_namespaces": [
+	// "kv_namespaces": [],
+	"hyperdrive": [
 		{
-			"binding": "KV_TASKS",
-			"id": "1234567878"
-		},
-		{
-			"binding": "KV_CATEGORIES",
-			"id": "1234567878"
+			"binding": "HYPERDRIVE",
+			"id": "0b3106baaad44be091b7e8b973ad49e5"
 		}
 	]
 

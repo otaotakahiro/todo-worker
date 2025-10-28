@@ -4,7 +4,7 @@
 declare namespace Cloudflare {
 	interface Env {
 		KV_TASKS: KVNamespace;
-		API_KEY: string;
+		HYPERDRIVE: Hyperdrive;
 	}
 }
 interface Env extends Cloudflare.Env {}

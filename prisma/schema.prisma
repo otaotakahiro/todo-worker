@@ -1,0 +1,77 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator markdown {
+  provider = "prisma-markdown"
+  output   = "../ERD.md"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       Int      @id @default(autoincrement())
+  email    String   @unique @db.VarChar(255)
+  password String   @db.VarChar(255)
+  createAt DateTime @default(now()) //@default で 指定しないでも自動で入れる
+  tasks    Task[]
+  tags     Tag[]
+}
+
+// status に型をつけてあげるための設定
+enum TaskStatus {
+  pending
+  inprogress @map("in-progress") // プロパティ名にハイフンは使えない
+  completed
+  cancelled
+}
+
+// priority に複数の選択肢の場合VarChar ではなく それ用の型を作って、作った型を指定する
+enum TaskPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+model Task {
+  id          Int           @id @default(autoincrement())
+  userId      Int           @db.Integer
+  title       String        @db.VarChar(255)
+  description String        @default("") @db.Text // 空文字にするか？null にしたほうが良いか？
+  status      TaskStatus // TaskStatus型を作成して宣言する
+  priority    TaskPriority? // TaskPriority型を作成して宣言する nullable にする
+  expiresAt   DateTime?
+  completedAt DateTime?
+  user        User          @relation(fields: [userId], references: [id])
+  taskTags    TaskTag[]
+}
+
+model Tag {
+  id       Int       @id @default(autoincrement())
+  userId   Int       @db.Integer
+  name     String    @db.VarChar(255)
+  color    String    @db.VarChar(6)
+  user     User      @relation(fields: [userId], references: [id])
+  taskTags TaskTag[]
+
+  @@unique([userId, name]) // ユーザーIDとタグ名をユニークなものをデータベースに入れる
+}
+
+model TaskTag {
+  taskId Int  @db.Integer
+  tagId  Int  @db.Integer
+  task   Task @relation(fields: [taskId], references: [id])
+  tag    Tag  @relation(fields: [tagId], references: [id])
+
+  @@id([taskId, tagId])
+}
