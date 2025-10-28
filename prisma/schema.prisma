@@ -44,15 +44,15 @@ enum TaskPriority {
 }
 
 model Task {
-  id          Int          @id @default(autoincrement())
-  userId      Int          @db.Integer
-  title       String       @db.VarChar(255)
-  description String       @default("") @db.Text // 空文字にするか？null にしたほうが良いか？
-  status      TaskStatus
-  priority    TaskPriority
+  id          Int           @id @default(autoincrement())
+  userId      Int           @db.Integer
+  title       String        @db.VarChar(255)
+  description String        @default("") @db.Text // 空文字にするか？null にしたほうが良いか？
+  status      TaskStatus // TaskStatus型を作成して宣言する
+  priority    TaskPriority? // TaskPriority型を作成して宣言する nullable にする
   expiresAt   DateTime?
   completedAt DateTime?
-  user        User         @relation(fields: [userId], references: [id])
+  user        User          @relation(fields: [userId], references: [id])
   taskTags    TaskTag[]
 }
 
@@ -63,6 +63,8 @@ model Tag {
   color    String    @db.VarChar(6)
   user     User      @relation(fields: [userId], references: [id])
   taskTags TaskTag[]
+
+  @@unique([userId, name]) // ユーザーIDとタグ名をユニークなものをデータベースに入れる
 }
 
 model TaskTag {

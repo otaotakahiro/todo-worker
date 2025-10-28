@@ -20,7 +20,7 @@ erDiagram
   String(255) title
   String description
   TaskStatus status
-  TaskPriority priority
+  TaskPriority priority "nullable"
   DateTime expiresAt "nullable"
   DateTime completedAt "nullable"
 }
