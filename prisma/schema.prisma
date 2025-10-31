@@ -70,8 +70,8 @@ model Tag {
 model TaskTag {
   taskId Int  @db.Integer
   tagId  Int  @db.Integer
-  task   Task @relation(fields: [taskId], references: [id])
-  tag    Tag  @relation(fields: [tagId], references: [id])
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([taskId, tagId])
 }
