@@ -1,13 +1,56 @@
 import { Hono } from 'hono';
-import { TaskEntity } from '../Entity/TaskEntity';
+// import { TaskEntity } from '../Entity/TaskEntity';
 import { zValidator } from '@hono/zod-validator';
 import z, { length } from 'zod';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Session } from '@prisma/client';
+
+interface Variables {
+	prisma: PrismaClient;
+	session?: Session;
+}
 
 // honoのフレームワークでfetchの処理、ルーティングを簡単にしてくれる
 // export して他のファイルでも使えるようにした
-export const taskRoute = new Hono<{ Bindings: Env }>();
+export const taskRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
+// middleware?第一引数で対象のURLを指定する
+taskRoute.use('/*', async (context, next) => {
+	//Hyperdrive の接続情報を使用して Prisma を初期化 本来は各API処理に記述していたが複数回出てくるのでまとめて管理
+	const adapter = new PrismaPg({ connectionString: context.env.HYPERDRIVE.connectionString });
+	const prisma = new PrismaClient({ adapter });
+
+	context.set('prisma', prisma);
+	// ミドルウェアが動くために必要な記述
+	await next();
+});
+
+// 同じミドルウェアがある場合は順番に処理される
+taskRoute.use('/*', async (context, next) => {
+	// アクセストークンの保持を確認
+	// Authorization: Bearer <accessToken>
+	const accessToken = context.req.header('Authorization')?.split(' ').pop();
+
+	if (!accessToken) {
+		return context.json({ error: 'Unauthorized' }, 401);
+	}
+
+	//アクセストークンを持っていたら
+	// インソムニアの auth にアクセストークンを設定して動作テスト
+	const prisma = context.get('prisma');
+	const session = await prisma.session.findUnique({
+		where: {
+			id: accessToken,
+		},
+	});
+
+	if (!session) {
+		return context.json({ error: 'Unauthorized' }, 401);
+	}
+
+	context.set('session', session);
+
+	await next();
+});
 
 // タスク（tasks）を登録する　CRUD　のCreate
 // zod　によるバリデーションの処理追加　引数を増やして第二引数で受け取るデータの形を指定する
@@ -27,10 +70,8 @@ taskRoute.post(
 	),
 	async (context) => {
 		const body = context.req.valid('json'); //vaild を調べる
-
-		//Hyperdrive の接続情報を使用して Prisma を初期化
-		const adapter = new PrismaPg({ connectionString: context.env.HYPERDRIVE.connectionString });
-		const prisma = new PrismaClient({ adapter });
+		// set したものをgetで受け取る
+		const prisma = context.get('prisma');
 
 		//タス区をリレーション関係のデータと一度に作成
 		const task = await prisma.task.create({
@@ -104,8 +145,8 @@ taskRoute.post(
 // タスクをKVから取り出して表示させる　CRUD　のRead
 
 taskRoute.get('/:id', async (context) => {
-	const adapter = new PrismaPg({ connectionString: context.env.HYPERDRIVE.connectionString });
-	const prisma = new PrismaClient({ adapter });
+	// set したものをgetで受け取る
+	const prisma = context.get('prisma');
 
 	const id = context.req.param('id');
 
@@ -127,10 +168,8 @@ taskRoute.get('/:id', async (context) => {
 // タスクを1つ取得するKVから読み込んでいるものをprismaをタスクのタグも取得できるようにする
 
 taskRoute.get('/', async (context) => {
-	// prisma に接続するadapter を作る
-	const adapter = new PrismaPg({ connectionString: context.env.HYPERDRIVE.connectionString });
-	// 変数にprismaを動作させるように代入
-	const prisma = new PrismaClient({ adapter });
+	// set したものをgetで受け取る
+	const prisma = context.get('prisma');
 
 	const tasks = await prisma.task.findMany({
 		// リストを一回取得してさらにリレーション関係にあるものを取得するには include でさらに取りに行く
@@ -166,9 +205,16 @@ taskRoute.patch(
 	async (context) => {
 		const id = context.req.param('id');
 		const body = context.req.valid('json');
+		// set したものをgetで受け取る
+		const prisma = context.get('prisma');
 
-		const adapter = new PrismaPg({ connectionString: context.env.HYPERDRIVE.connectionString });
-		const prisma = new PrismaClient({ adapter });
+		const existingTask = await prisma.task.findUnique({
+			where: { id: Number(id) },
+		});
+
+		if (!existingTask) {
+			return context.json({ error: 'Task not found' }, 404);
+		}
 
 		const task = await prisma.task.update({
 			where: { id: Number(id) },
@@ -229,10 +275,20 @@ taskRoute.patch(
 // タスクを削除する　CRUD のDelete
 
 taskRoute.delete('/:id', async (context) => {
-	const adapter = new PrismaPg({ connectionString: context.env.HYPERDRIVE.connectionString });
-	const prisma = new PrismaClient({ adapter });
+	// set したものをgetで受け取る
+	const prisma = context.get('prisma');
 
 	const id = context.req.param('id');
+
+	// idからタスクの存在を確認して、空の状態で削除したら エラーメッセージを送る処理
+	const existingTask = await prisma.task.findUnique({
+		where: { id: Number(id) },
+	});
+
+	if (!existingTask) {
+		return context.json({ error: 'Task not found' }, 404);
+	}
+
 	await prisma.task.delete({
 		where: { id: Number(id) },
 	});

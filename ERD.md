@@ -8,6 +8,12 @@
 
 ```mermaid
 erDiagram
+"Session" {
+  String id PK
+  Int userId FK
+  DateTime createAt
+  DateTime expiresAt
+}
 "User" {
   Int id PK
   String(255) email UK
@@ -34,11 +40,21 @@ erDiagram
   Int taskId FK
   Int tagId FK
 }
+"Session" }o--|| "User" : user
 "Task" }o--|| "User" : user
 "Tag" }o--|| "User" : user
 "TaskTag" }o--|| "Task" : task
 "TaskTag" }o--|| "Tag" : tag
 ```
+
+### `Session`
+
+Properties as follows:
+
+- `id`:
+- `userId`:
+- `createAt`:
+- `expiresAt`:
 
 ### `User`
 

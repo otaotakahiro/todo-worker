@@ -18,13 +18,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Session {
+  id        String   @id @default(uuid())
+  userId    Int      @db.Integer
+  createAt  DateTime @default(now())
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id])
+}
+
 model User {
-  id       Int      @id @default(autoincrement())
-  email    String   @unique @db.VarChar(255)
-  password String   @db.VarChar(255)
-  createAt DateTime @default(now()) //@default で 指定しないでも自動で入れる
+  id       Int       @id @default(autoincrement())
+  email    String    @unique @db.VarChar(255)
+  password String    @db.VarChar(255)
+  createAt DateTime  @default(now()) //@default で 指定しないでも自動で入れる
   tasks    Task[]
   tags     Tag[]
+  sessions Session[]
 }
 
 // status に型をつけてあげるための設定

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { taskRoute } from './Route/TaskRoute';
 import { userRoute } from './Route/UserRoute';
+import { authRoute } from './Route/AuthRoute';
 
 const app = new Hono<{ Bindings: Env }>();
 app
@@ -11,8 +12,9 @@ app
 			origin: ['http://localhost:5173'], // 許可するオリジンを指定する
 		})
 	)
-	.route('/api/v1/tasks', taskRoute) // useで
-	.route('/api/v1/users', userRoute); // useで
+	.route('/api/v1/auth', authRoute) // useで
+	.route('/api/v1/users', userRoute) // useで
+	.route('/api/v1/tasks', taskRoute); // useで
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
