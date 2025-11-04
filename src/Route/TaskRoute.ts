@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 // import { TaskEntity } from '../Entity/TaskEntity';
 import { zValidator } from '@hono/zod-validator';
-import z, { length } from 'zod';
+import z from 'zod';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, Session } from '@prisma/client';
 

@@ -33,20 +33,25 @@ authRoute.post(
 		})
 	),
 	async (context) => {
+		// リクエストボディを検証
 		const body = await context.req.json();
+
+		// Prismaクライアントを取得
 		const prisma = context.get('prisma');
 
+		// ユーザーを取得
 		const user = await prisma.user.findUnique({
 			where: {
 				email: body.email,
 				password: body.password,
 			},
 		});
-		//
+		// ユーザーが存在しない場合はエラーを返却
 		if (!user) {
 			return context.json({ error: 'Invalid email or password' }, 401);
 		}
 
+		// セッションの作成
 		const session = await prisma.session.create({
 			data: {
 				userId: user.id,
@@ -54,8 +59,7 @@ authRoute.post(
 			},
 		});
 
-		//
-		// ユーザーをHttpレスポンスで返却
+		// ユーザーをHttpレスポンスで返却（パスワードは返却しない）
 		return context.json({
 			id: user.id,
 			email: user.email,
