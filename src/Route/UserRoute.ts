@@ -3,25 +3,41 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { Hono } from 'hono';
 import z from 'zod';
-//
-export const userRoute = new Hono<{ Bindings: Env }>();
 
+interface Variables {
+	prisma: PrismaClient;
+}
+
+// Honoインスタンスを作成する
+export const userRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+// アダプターを作成してprismaに接続できるようにする
+userRoute.use('/*', async (context, next) => {
+	const adapter = new PrismaPg({ connectionString: context.env.HYPERDRIVE.connectionString });
+	const prisma = new PrismaClient({ adapter });
+	// setしてあとからgetで使えるようにする
+	context.set('prisma', prisma);
+
+	await next();
+});
+
+// ユーザーデータを作成する
 userRoute.post(
+	// POST 時のエンドポイント index.ts で users パス を設定
 	'/',
-	//第に引数でバリデーxションチェック
+	// zod 入力規則の設定 バリデーション処理
+	// zValidator を使えるようにインポートする
 	zValidator(
+		// 引数に json形式 でかつ z.object でプロパティに制約をかける
 		'json',
 		z.object({
 			email: z.string().min(1).max(255),
-			password: z.string().min(8).max(255),
+			password: z.string().min(4).max(255),
 		})
 	),
 	async (context) => {
 		const body = await context.req.json();
-		// console.log(body);
-		// context.env
-		const adapter = new PrismaPg({ connectionString: context.env.HYPERDRIVE.connectionString });
-		const prisma = new PrismaClient({ adapter });
+		const prisma = context.get('prisma');
 
 		const user = await prisma.user.create({
 			data: {
