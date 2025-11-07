@@ -10,6 +10,7 @@ interface Variables {
 
 export const authRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+// アダプターを作成してprismaに接続するミドルウェアを作成する
 authRoute.use('/*', async (context, next) => {
 	const adapter = new PrismaPg({ connectionString: context.env.HYPERDRIVE.connectionString });
 	const prisma = new PrismaClient({ adapter });
@@ -19,6 +20,7 @@ authRoute.use('/*', async (context, next) => {
 	await next();
 });
 
+// 認証トークンを生成してDBに格納する
 authRoute.post(
 	// POST 時のエンドポイント index.ts で auths パス を設定
 	'/login',
@@ -39,7 +41,7 @@ authRoute.post(
 		// Prismaクライアントを取得
 		const prisma = context.get('prisma');
 
-		// ユーザーを取得
+		// DBにアクセスしてbodyの内容で存在確認
 		const user = await prisma.user.findUnique({
 			where: {
 				email: body.email,
@@ -68,23 +70,25 @@ authRoute.post(
 	}
 );
 
+// ログアウト機能
 authRoute.delete('/logout', async (context) => {
+	// ヘッダーからアクセストークンのみを取得
 	const accessToken = context.req.header('Authorization')?.split(' ').pop();
-
+	// アクセストークンがなければエラーを返す
 	if (!accessToken) {
 		return context.json({ error: 'Unauthorized' });
 	}
 
 	const prisma = context.get('prisma');
-
+	// DB側にアクセスしてアクセストークンを取得する
 	const session = await prisma.session.findUnique({
 		where: { id: accessToken },
 	});
-
+	//  見つからなければエラーを返す
 	if (!session) {
 		return context.json({ error: 'Unauthorized' });
 	}
-
+	// 該当のアクセストークンをDBから削除する
 	await prisma.session.delete({
 		where: {
 			id: session.id,

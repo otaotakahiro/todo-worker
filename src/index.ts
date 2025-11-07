@@ -12,6 +12,7 @@ app
 			origin: ['http://localhost:5173'], // 許可するオリジンを指定する
 		})
 	)
+	// Route で作成したAPIを指定したパスで使えるようにしている
 	.route('/api/v1/auth', authRoute) // useで
 	.route('/api/v1/users', userRoute) // useで
 	.route('/api/v1/tasks', taskRoute); // useで
@@ -24,3 +25,7 @@ export default {
 
 // 宿題CRUD をすべて作成しておく
 // CRUDで作成済み　deleteはbody？　それともTaskEntity？ TaskEntityの気がする
+
+// 1.コード全てにコメント入れる
+// 2.プルリクとコードレビュー
+// 現状ログインしたらどのページ行ってもログイン情報を知っていたら再度アクセスできる（他の人も）のでそれをどう解決するのか

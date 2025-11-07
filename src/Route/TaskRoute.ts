@@ -18,35 +18,36 @@ taskRoute.use('/*', async (context, next) => {
 	//Hyperdrive の接続情報を使用して Prisma を初期化 本来は各API処理に記述していたが複数回出てくるのでまとめて管理
 	const adapter = new PrismaPg({ connectionString: context.env.HYPERDRIVE.connectionString });
 	const prisma = new PrismaClient({ adapter });
-
+	// 他のコードでアダプターとprismaを使えるようにするためにする
 	context.set('prisma', prisma);
 	// ミドルウェアが動くために必要な記述
 	await next();
 });
 
 // 同じミドルウェアがある場合は順番に処理される
+// アクセストークンの保持をユーザー側、DB側で確認
 taskRoute.use('/*', async (context, next) => {
-	// アクセストークンの保持を確認
-	// Authorization: Bearer <accessToken>
+	// Authorization: Bearer <accessToken> アクセストークンのみを変数に代入する
 	const accessToken = context.req.header('Authorization')?.split(' ').pop();
-
+	// アクセストークンがなければ、エラーを返す
 	if (!accessToken) {
 		return context.json({ error: 'Unauthorized' }, 401);
 	}
 
-	//アクセストークンを持っていたら
-	// インソムニアの auth にアクセストークンを設定して動作テスト
+	//アクセストークンを持っていたら次の処理
+	// アダプターとプリズマの接続をここで呼び出す
 	const prisma = context.get('prisma');
+	// DB側でもアクセストークンが存在するか確認
 	const session = await prisma.session.findUnique({
 		where: {
 			id: accessToken,
 		},
 	});
-
+	// アクセストークンがなければエラーを返す
 	if (!session) {
 		return context.json({ error: 'Unauthorized' }, 401);
 	}
-
+	// ここでsession をあとから呼び出せるようにする
 	context.set('session', session);
 
 	await next();
@@ -54,7 +55,7 @@ taskRoute.use('/*', async (context, next) => {
 
 // タスク（tasks）を登録する　CRUD　のCreate
 // zod　によるバリデーションの処理追加　引数を増やして第二引数で受け取るデータの形を指定する
-// json でかつ　object　じゃ無いとだめですよ
+// json でかつ　object で かつその内容に制限をかけることで、意図しないデータの入力を未然に防ぐ
 taskRoute.post(
 	'/',
 	zValidator(
@@ -69,11 +70,12 @@ taskRoute.post(
 		})
 	),
 	async (context) => {
-		const body = context.req.valid('json'); //vaild を調べる
+		//validメソッドでバリデーション済みのデータを取得する
+		const body = context.req.valid('json');
 		// set したものをgetで受け取る
 		const prisma = context.get('prisma');
 
-		//タス区をリレーション関係のデータと一度に作成
+		//タスクをリレーション関係のデータと一緒に一度で取得する
 		const task = await prisma.task.create({
 			data: {
 				userId: 1,
@@ -83,20 +85,22 @@ taskRoute.post(
 				priority: body.priority,
 				expiresAt: body.expiresAt,
 
-				// タグをリレーション関係のデータと一度に作成
+				// リレーション関係からタグのデータを参照する
+				// データベースのスキーマから判断
 				taskTags: {
-					// データベースのスキーマから判断
+					// tagのjsonを作る、bodyに格納されたリクエスト内容をmapメソッドで繰り返し取得して設定
 					create: body.tags?.map((tagName) => ({
-						// ないのでtagを作る
 						tag: {
+							// 既存のtagに接続するか、なければ新規制作する
 							connectOrCreate: {
+								// ここでDB内のtagの存在を確認する
 								where: {
 									userId_name: {
 										userId: 1,
 										name: tagName,
 									},
 								},
-
+								// whereで見つからなかった場合のみ、新しいTagを作成
 								create: {
 									userId: 1,
 									name: tagName,
@@ -142,16 +146,16 @@ taskRoute.post(
 	}
 );
 
-// タスクをKVから取り出して表示させる　CRUD　のRead
-
+// タスク1つをDBから取り出して表示させる　CRUD　のRead
 taskRoute.get('/:id', async (context) => {
 	// set したものをgetで受け取る
 	const prisma = context.get('prisma');
-
+	// リクエストURLから受け取ったidを格納、DBからデータを特定するために使う
 	const id = context.req.param('id');
-
+	// DBから該当するデータ1つを取得する
 	const task = await prisma.task.findUnique({
 		where: { id: Number(id) },
+		// include でリレーション関係のデータも取得する
 		include: {
 			taskTags: {
 				include: {
@@ -164,13 +168,11 @@ taskRoute.get('/:id', async (context) => {
 	return context.json(task);
 });
 
-// タスク全部をKVから取り出して表示させる　CRUD　のRead
-// タスクを1つ取得するKVから読み込んでいるものをprismaをタスクのタグも取得できるようにする
-
+// タスク全部をDBから取り出して表示させる　CRUD　のRead
 taskRoute.get('/', async (context) => {
 	// set したものをgetで受け取る
 	const prisma = context.get('prisma');
-
+	// findManyメソッドでtaskすべてを取得する
 	const tasks = await prisma.task.findMany({
 		// リストを一回取得してさらにリレーション関係にあるものを取得するには include でさらに取りに行く
 		include: {
@@ -187,7 +189,6 @@ taskRoute.get('/', async (context) => {
 //
 
 // タスクを更新する　CRUD　のUpdate
-
 taskRoute.patch(
 	'/:id',
 	zValidator(
@@ -203,21 +204,25 @@ taskRoute.patch(
 		})
 	),
 	async (context) => {
+		// 更新するタスクを特定するために、リクエストからidを取得する
 		const id = context.req.param('id');
+		// zodでバリデーションされた結果をbodyに格納する
 		const body = context.req.valid('json');
 		// set したものをgetで受け取る
 		const prisma = context.get('prisma');
-
+		// 該当するタスク1つを取得する
 		const existingTask = await prisma.task.findUnique({
 			where: { id: Number(id) },
 		});
-
+		// タスク内容が存在しなかった場合、タスクが見つからないとエラーを返す
 		if (!existingTask) {
 			return context.json({ error: 'Task not found' }, 404);
 		}
-
+		// taskを更新する処理
 		const task = await prisma.task.update({
+			// id から更新するタスクを特定
 			where: { id: Number(id) },
+			// リクエストデータをbodyに入れてその中の各データを対応するオブジェクト（スキーマ？）に設定する
 			data: {
 				title: body.title,
 				description: body.description,
@@ -225,19 +230,20 @@ taskRoute.patch(
 				priority: body.priority,
 				expiresAt: body.expiresAt,
 
-				// 既存のすべてのタグを削除してから新しいタグを設定
+				// 新しいタグを設定
 				taskTags: (() => {
 					if (!body.tags) {
 						return undefined;
 					}
 
 					return {
+						// 既存のタグをすべて削除
 						deleteMany: {},
 						// データベースのスキーマから判断
 						create: body.tags?.map((tagName) => ({
 							// ないのでtagを作る
 							tag: {
-								// ここで userId, tagName を探して なければ create する
+								// ここで userId, tagName を探す
 								connectOrCreate: {
 									where: {
 										userId_name: {
@@ -245,7 +251,7 @@ taskRoute.patch(
 											name: tagName,
 										},
 									},
-
+									// DBにタグがなければ作成する
 									create: {
 										userId: 1,
 										name: tagName,
@@ -273,25 +279,25 @@ taskRoute.patch(
 );
 
 // タスクを削除する　CRUD のDelete
-
 taskRoute.delete('/:id', async (context) => {
 	// set したものをgetで受け取る
 	const prisma = context.get('prisma');
-
+	// 削除するタスク特定するためにidを取得する
 	const id = context.req.param('id');
 
 	// idからタスクの存在を確認して、空の状態で削除したら エラーメッセージを送る処理
+	// タスクIDからそのスキーマのデータを代入
 	const existingTask = await prisma.task.findUnique({
 		where: { id: Number(id) },
 	});
-
+	// タスクのデータ有無をチェック 存在しなければエラーを返す
 	if (!existingTask) {
 		return context.json({ error: 'Task not found' }, 404);
 	}
-
+	// id に該当するタスクを削除
 	await prisma.task.delete({
 		where: { id: Number(id) },
 	});
-
+	// 削除結果を返す
 	return context.json({ message: `タスクID${id}のタスク内容を削除しました` });
 });

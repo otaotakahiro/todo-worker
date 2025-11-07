@@ -8,17 +8,20 @@ interface Variables {
 	prisma: PrismaClient;
 }
 
+// Honoインスタンスを作成する
 export const userRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+// アダプターを作成してprismaに接続できるようにする
 userRoute.use('/*', async (context, next) => {
 	const adapter = new PrismaPg({ connectionString: context.env.HYPERDRIVE.connectionString });
 	const prisma = new PrismaClient({ adapter });
-
+	// setしてあとからgetで使えるようにする
 	context.set('prisma', prisma);
 
 	await next();
 });
 
+// ユーザーデータを作成する
 userRoute.post(
 	// POST 時のエンドポイント index.ts で users パス を設定
 	'/',
