@@ -5,6 +5,8 @@ import z from 'zod';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, Session } from '@prisma/client';
 
+// Hono のコンテキストで使用する型を宣言
+// ミドルウェアを作るときに型エラーになるので、宣言して型安全にする
 interface Variables {
 	prisma: PrismaClient;
 	session?: Session;
@@ -13,7 +15,7 @@ interface Variables {
 // honoのフレームワークでfetchの処理、ルーティングを簡単にしてくれる
 // export して他のファイルでも使えるようにした
 export const taskRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
-// middleware?第一引数で対象のURLを指定する
+// middleware?第一引数で対象のURLを指定する DBに関する接続処理を共通化
 taskRoute.use('/*', async (context, next) => {
 	//Hyperdrive の接続情報を使用して Prisma を初期化 本来は各API処理に記述していたが複数回出てくるのでまとめて管理
 	const adapter = new PrismaPg({ connectionString: context.env.HYPERDRIVE.connectionString });
@@ -61,7 +63,6 @@ taskRoute.post(
 	zValidator(
 		'json',
 		z.object({
-			// jsonで受け取ったデータをzod形式のobjectチェックルールでチェックする
 			title: z.string().min(1), //title:プロパティが文字列で1文字以上であれば通過
 			description: z.string().optional(), //description:プロパティが文字列で、オプショナル（合ってもなくても良い）
 			priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(), //enum([a, b, c, d]) a〜dのいずれかを許可合ってもなくても良い
@@ -78,7 +79,7 @@ taskRoute.post(
 		//タスクをリレーション関係のデータと一緒に一度で取得する
 		const task = await prisma.task.create({
 			data: {
-				userId: 1,
+				userId: 1, // TODO: ログイン処理作ったら変更 FIXME: などをつけると一覧のリストにしてくれる拡張機能がある
 				title: body.title,
 				description: body.description,
 				status: 'pending', // タスク開始時はpending固定
@@ -165,6 +166,18 @@ taskRoute.get('/:id', async (context) => {
 		},
 	});
 
+	if (!task) {
+		return context.json({ error: 'Task not found' }, 404);
+	}
+
+	// 認証ミドルウェアを呼び出す
+	// タスクの所有者であるか確認
+	const session = context.get('session');
+	// 実行しているユーザーとタスクのユーザーが一致しているか確認する
+	if (session?.userId !== task.userId) {
+		return context.json({ error: 'Forbidden' }, 403); // 403 アクセス権限がない
+	}
+
 	return context.json(task);
 });
 
@@ -173,7 +186,16 @@ taskRoute.get('/', async (context) => {
 	// set したものをgetで受け取る
 	const prisma = context.get('prisma');
 	// findManyメソッドでtaskすべてを取得する
+	const session = context.get('session');
+
+	if (!session) {
+		return context.json({ error: 'Unauthorized' }, 401);
+	}
 	const tasks = await prisma.task.findMany({
+		// セッションID のユーザーで絞り込みをかける
+		where: {
+			userId: session.userId,
+		},
 		// リストを一回取得してさらにリレーション関係にあるものを取得するには include でさらに取りに行く
 		include: {
 			taskTags: {
@@ -217,6 +239,14 @@ taskRoute.patch(
 		// タスク内容が存在しなかった場合、タスクが見つからないとエラーを返す
 		if (!existingTask) {
 			return context.json({ error: 'Task not found' }, 404);
+		}
+
+		// 認証ミドルウェアを呼び出す
+		// タスクの所有者であるか確認
+		const session = context.get('session');
+		// 実行しているユーザーとタスクのユーザーが一致しているか確認する
+		if (session?.userId !== existingTask.userId) {
+			return context.json({ error: 'Forbidden' }, 403); // 403 アクセス権限がない
 		}
 		// taskを更新する処理
 		const task = await prisma.task.update({
@@ -287,12 +317,19 @@ taskRoute.delete('/:id', async (context) => {
 
 	// idからタスクの存在を確認して、空の状態で削除したら エラーメッセージを送る処理
 	// タスクIDからそのスキーマのデータを代入
-	const existingTask = await prisma.task.findUnique({
+	const task = await prisma.task.findUnique({
 		where: { id: Number(id) },
 	});
 	// タスクのデータ有無をチェック 存在しなければエラーを返す
-	if (!existingTask) {
+	if (!task) {
 		return context.json({ error: 'Task not found' }, 404);
+	}
+	// 認証ミドルウェアを呼び出す
+	// タスクの所有者であるか確認
+	const session = context.get('session');
+	// 実行しているユーザーとタスクのユーザーが一致しているか確認する
+	if (session?.userId !== task.userId) {
+		return context.json({ error: 'Forbidden' }, 403); // 403 アクセス権限がない
 	}
 	// id に該当するタスクを削除
 	await prisma.task.delete({

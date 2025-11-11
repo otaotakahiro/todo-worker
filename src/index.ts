@@ -4,6 +4,10 @@ import { taskRoute } from './Route/TaskRoute';
 import { userRoute } from './Route/UserRoute';
 import { authRoute } from './Route/AuthRoute';
 
+/**
+ * JSdoc
+ * @param hogehoge
+ */
 const app = new Hono<{ Bindings: Env }>();
 app
 	.use(
